@@ -96,3 +96,14 @@ enum ApplicationStatus {
   APPROVED
   REJECTED
 }
+
+// Refresh tokens for authentication
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}

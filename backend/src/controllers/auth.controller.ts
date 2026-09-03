@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -25,14 +26,27 @@ export const login = async (req: Request, res: Response) => {
             return res.status(401).json({ message: 'Identifiants incorrects' });
         }
 
-        const token = jwt.sign(
+        const accessToken = jwt.sign(
             { userId: user.id, role: user.role, cityId: user.cityId },
             process.env.JWT_SECRET as string,
             { expiresIn: '24h' }
         );
 
+        // Create refresh token (expires in 7 days)
+        const refreshTokenValue = randomUUID();
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+        await prisma.refreshToken.create({
+            data: {
+                token: refreshTokenValue,
+                userId: user.id,
+                expiresAt,
+            }
+        });
+
         res.json({
-            token,
+            token: accessToken,
+            refreshToken: refreshTokenValue,
             user: {
                 id: user.id,
                 email: user.email,
@@ -94,6 +108,54 @@ export const initAdmin = async (req: Request, res: Response) => {
         res.status(201).json({ message: 'Super admin créé', id: admin.id });
     } catch (error) {
         console.error('Init admin error:', error);
+        res.status(500).json({ message: 'Erreur serveur' });
+    }
+};
+
+// Refresh endpoint: provide refresh token to obtain new access token
+export const refreshAccessToken = async (req: Request, res: Response) => {
+    try {
+        const { refreshToken } = req.body;
+        if (!refreshToken) return res.status(400).json({ message: 'Refresh token requis' });
+
+        const stored = await prisma.refreshToken.findUnique({ where: { token: refreshToken } });
+        if (!stored) return res.status(401).json({ message: 'Refresh token invalide' });
+        if (stored.expiresAt.getTime() < Date.now()) {
+            await prisma.refreshToken.delete({ where: { token: refreshToken } });
+            return res.status(401).json({ message: 'Refresh token expiré' });
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: stored.userId } });
+        if (!user) return res.status(401).json({ message: 'Utilisateur introuvable' });
+
+        const newAccessToken = jwt.sign(
+            { userId: user.id, role: user.role, cityId: user.cityId },
+            process.env.JWT_SECRET as string,
+            { expiresIn: '24h' }
+        );
+
+        // Optionally rotate refresh token
+        await prisma.refreshToken.delete({ where: { token: refreshToken } });
+        const newRefresh = randomUUID();
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        await prisma.refreshToken.create({ data: { token: newRefresh, userId: user.id, expiresAt } });
+
+        res.json({ token: newAccessToken, refreshToken: newRefresh });
+    } catch (error) {
+        console.error('Refresh token error:', error);
+        res.status(500).json({ message: 'Erreur serveur' });
+    }
+};
+
+// Logout: revoke a refresh token
+export const logout = async (req: Request, res: Response) => {
+    try {
+        const { refreshToken } = req.body;
+        if (!refreshToken) return res.status(400).json({ message: 'Refresh token requis' });
+        await prisma.refreshToken.deleteMany({ where: { token: refreshToken } });
+        res.json({ message: 'Déconnecté' });
+    } catch (error) {
+        console.error('Logout error:', error);
         res.status(500).json({ message: 'Erreur serveur' });
     }
 };
