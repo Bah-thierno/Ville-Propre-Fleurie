@@ -1,10 +1,8 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { randomUUID } from 'crypto';
-
-const prisma = new PrismaClient();
 
 export const login = async (req: Request, res: Response) => {
     try {
@@ -50,6 +48,7 @@ export const login = async (req: Request, res: Response) => {
             user: {
                 id: user.id,
                 email: user.email,
+                name: user.name,
                 role: user.role,
                 cityId: user.cityId
             }
@@ -159,3 +158,34 @@ export const logout = async (req: Request, res: Response) => {
         res.status(500).json({ message: 'Erreur serveur' });
     }
 };
+
+// Get current authenticated user profile
+export const getMe = async (req: Request, res: Response) => {
+    try {
+        if (!req.user?.userId) {
+            return res.status(401).json({ message: 'Non authentifié' });
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { id: req.user.userId },
+            select: {
+                id: true,
+                email: true,
+                name: true,
+                role: true,
+                cityId: true,
+                createdAt: true
+            }
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: 'Utilisateur introuvable' });
+        }
+
+        res.json(user);
+    } catch (error) {
+        console.error('getMe error:', error);
+        res.status(500).json({ message: 'Erreur serveur' });
+    }
+};
+

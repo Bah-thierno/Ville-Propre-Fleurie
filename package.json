@@ -5,9 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:frontend": "vite",
+    "dev:backend": "npm --prefix backend run dev",
     "build": "tsc -b && vite build",
+    "build:frontend": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:seed": "npm --prefix backend run seed",
     "start:local": "swa start http://localhost:5173 --api-location ./api --run \"npm run dev\""
   },
   "dependencies": {

@@ -1,42 +1,89 @@
-version: '3.8'
+##############################################################
+# 🇬🇳 Guinée Propre & Fleurie — Docker Compose (3-Tier)
+#
+# Services:
+#   1. postgres  — Base de données PostgreSQL (Couche 3)
+#   2. backend   — API Express + Prisma (Couche 2)
+#   3. frontend  — React + Nginx (Couche 1)
+##############################################################
 
 services:
+
+  # ─── COUCHE 3 : Base de Données ──────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: vpf_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: guinee_propre_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: vpf_secret_2024
+    volumes:
+      - guinee_postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - vpf_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d guinee_propre_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ─── COUCHE 2 : Backend API ──────────────────────────────
+  backend:
+    image: vpf_backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: vpf_backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:vpf_secret_2024@postgres:5432/guinee_propre_db?schema=public
+      JWT_SECRET: vpf_jwt_super_secret_key_2024_change_in_prod
+      JWT_EXPIRES_IN: 7d
+      CORS_ORIGIN: http://localhost:80,http://localhost
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - vpf_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+  # ─── COUCHE 1 : Frontend ─────────────────────────────────
   frontend:
+    image: guinee-propre-fleurie-frontend:latest
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: guinee_frontend
+    container_name: vpf_frontend
     restart: unless-stopped
     ports:
-      - "8080:80"
-
-  postgres:
-    image: postgres:15-alpine
-    container_name: guinee_postgres
-    restart: always
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: guinee_propre_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  backend:
-    build: ./backend
-    container_name: guinee_backend
-    restart: always
-    ports:
-      - "3000:3000"
-    environment:
-      - DATABASE_URL=postgresql://postgres:password@postgres:5432/guinee_propre_db
-      - JWT_SECRET=super_secret_dev_key_change_me
+      - "80:80"
     depends_on:
-      - postgres
-    volumes:
-      - ./backend:/usr/src/app
-      - /usr/src/app/node_modules
+      backend:
+        condition: service_healthy
+    networks:
+      - vpf_network
 
+# ─── Réseaux ─────────────────────────────────────────────
+networks:
+  vpf_network:
+    driver: bridge
+    name: vpf_network
+
+# ─── Volumes persistants ─────────────────────────────────
 volumes:
-  postgres_data:
+  guinee_postgres_data:
+    name: guinee_postgres_data

@@ -1,14 +1,16 @@
 import { Router } from 'express';
-import { login, register, initAdmin, refreshAccessToken, logout } from '../controllers/auth.controller';
+import { login, register, initAdmin, refreshAccessToken, logout, getMe } from '../controllers/auth.controller';
 import { validateLogin, validateRegister } from '../middleware/validators';
 import { authenticateToken, requireSuperAdmin } from '../middleware/auth.middleware';
 
 const router = Router();
 
 router.post('/login', validateLogin, login);
-
 router.post('/refresh', refreshAccessToken);
 router.post('/logout', logout);
+
+// Profile check for authenticated user
+router.get('/me', authenticateToken, getMe);
 
 // Protect registration - only Super Admins can create new users (or for dev/seed)
 router.post('/register', authenticateToken, requireSuperAdmin, validateRegister, register);
