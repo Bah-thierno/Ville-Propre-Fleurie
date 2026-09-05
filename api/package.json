@@ -10,7 +10,7 @@
         "prestart": "npm run build"
     },
     "dependencies": {
-        "@azure/functions": "^4.0.0",
+        "@azure/functions": "^4.16.2",
         "mongodb": "^6.3.0",
         "jsonwebtoken": "^9.0.2",
         "bcryptjs": "^2.4.3"
